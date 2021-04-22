@@ -12,19 +12,28 @@ from feature_engine.variable_manipulation import _check_input_parameter_variable
 
 class OneHotEncoder(BaseCategoricalTransformer):
     """
-    One hot encoding consists in replacing the categorical variable by a
-    combination of binary variables which take value 0 or 1, to indicate if
-    a certain category is present in an observation. The binary variables are also
-    known as dummy variables.
+    One hot encoding consists in replacing the categorical variable by a group of
+    binary variables which take value 0 or 1, to indicate if a certain category is
+    present in an observation. The binary variables are also known as dummy variables.
 
-    For example, from the categorical variable "Gender" with categories "female" and
-    "male", we can generate the boolean variable "female", which takes 1 if the
-    observation is female or 0 otherwise. We can also generate the variable "male",
-    which takes 1 if the observation is "male" and 0 otherwise.
+    For example, from the categorical variable "Gender" with categories "female",
+    "male", "non_binary" and "other" the transformer will generate the boolean variable
+    "female", which takes 1 if the observation is female or 0 otherwise. It will also
+    generate the variable "male", with 1 if the observation is male and 0 otherwise,
+    and the variables "non_binary" and "other" following the same logic.
 
-    The encoder can create k binary variables per categorical variable, k being the
-    number of unique categories, or alternatively k-1 to avoid redundant information.
-    This behaviour can be specified using the parameter `drop_last`.
+    The encoder has the option to create k binary variables per categorical variable, k
+    being the number of unique categories. Alternatively, the transformer can create
+    k-1 binary variables, to avoid redundant information, when the parameter `drop_last`
+    is set to True.
+
+    **Important**
+
+    Categorical variables that contain only 2 unique categories, for example whether a
+    person is "child" or "adult", will be encoded only with 1 binary variable, because
+    the second variable is completely redundant.
+
+    **Encoding only most frequent categories**
 
     The encoder has the additional option to generate binary variables only for the
     top n most popular categories, that is, the categories that are shared by the
@@ -40,9 +49,16 @@ class OneHotEncoder(BaseCategoricalTransformer):
     Observations that do not show any of these popular categories, will have 0 in all
     the binary variables.
 
+    **Note**
+
+    Categorical variables with only 2 unique categories, will be encoded as 1 binary
+    variable.
+
+    **Attention**
+
     The encoder will encode only categorical variables (type 'object'). A list
     of variables can be passed as an argument. If no variables are passed as
-    argument, the encoder will find and encode categorical variables (object type).
+    argument, the encoder will find and encode all categorical variables (object type).
 
     The encoder first finds the categories to be encoded for each variable (fit). The
     encoder then creates one dummy variable per category for each variable
@@ -95,12 +111,26 @@ class OneHotEncoder(BaseCategoricalTransformer):
     Notes
     -----
     If the variables are intended for linear models, it is recommended to encode into
-    k-1 or top categories. If the variables are intended for tree based algorithms,
-    it is recommended to encode into k or top n categories. If feature selection
-    will be performed, then also encode into k or top n categories. Linear models
-    evaluate all features during fit, while tree based models and many feature
-    selection algorithms evaluate variables or groups of variables separately. Thus, if
-    encoding into k-1, the last variable / category will not be examined.
+    k-1 or top categories.
+
+    If the variables are intended for tree based algorithms, it is recommended to
+    encode into k or top n categories.
+
+    If feature selection will be performed, then also encode into k or top n
+    categories.
+
+    **Why these guidelines?**
+
+    Linear models evaluate all features during fit, while tree based models and many
+    feature selection algorithms evaluate variables or groups of variables separately.
+    Thus, if encoding into k-1, the last variable / category will not be examined.
+
+    **Note**
+
+    If you do not want the original variables dropped or you want categorical variables
+    with 2 categories encoded into 2 binary variables instead of 1, try using the
+    OneHotEncoder from Scikit-learn, and wrap it using the SklearnTransformerWrapper to
+    apply the transformation only to a selected group of variables.
 
     References
     ----------
@@ -112,10 +142,10 @@ class OneHotEncoder(BaseCategoricalTransformer):
     """
 
     def __init__(
-        self,
-        top_categories: Optional[int] = None,
-        variables: Union[None, int, str, List[Union[str, int]]] = None,
-        drop_last: bool = False,
+            self,
+            variables: Union[None, int, str, List[Union[str, int]]] = None,
+            top_categories: Optional[int] = None,
+            drop_last: bool = False,
     ) -> None:
 
         if top_categories and not isinstance(top_categories, int):
@@ -139,7 +169,7 @@ class OneHotEncoder(BaseCategoricalTransformer):
 
         X : pandas dataframe of shape = [n_samples, n_features]
             The training input samples.
-            Can be the entire dataframe, not just seleted variables.
+            Can be the entire dataframe, not just selected variables.
 
         y : pandas series, default=None
             Target. It is not needed in this encoded. You can pass y or
@@ -184,26 +214,21 @@ class OneHotEncoder(BaseCategoricalTransformer):
                         (X[var].nunique()) != self.top_categories):
                     # The top categories = number of categories
 
-                    self.encoder_dict_[var] = [x for x in X[var]
-                                               .value_counts()
-                                               .sort_values(ascending=False)
-                                               .head(self.top_categories)
-                                               .index
-                                               ] # Select as many dummy variables as number of categories
-                                                 #
+                    self.encoder_dict_[var] = [x for x in X[var].value_counts(
+                        ).sort_values(ascending=False).head(self.top_categories).index]
+                    # Select as many dummy variables as number of categories
+
                 elif ((X[var].nunique() <= 2) or
                       # When the variable is binary
                       (X[var].nunique() == self.top_categories)):
                     # When the top categories selected is equal to number of categories
-                    self.encoder_dict_[var] = [x for x in X[var]
-                                               .value_counts()
-                                               .sort_values(ascending=False)
-                                               .index
-                                               ][:-1]
+                    self.encoder_dict_[var] = [x for x in X[var] .value_counts(
+                        ).sort_values(ascending=False) .index][:-1]
+
         self._check_encoding_dictionary()
 
         self.input_shape_ = X.shape
-
+git st
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
